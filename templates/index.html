@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Contract Vulnerability Analyzer</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            padding-top: 2rem;
+            background-color: #f8f9fa;
+        }
+        .container {
+            max-width: 800px;
+        }
+        .card {
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+        }
+        .card-header {
+            background-color: #343a40;
+            color: white;
+            border-radius: 10px 10px 0 0 !important;
+        }
+        textarea {
+            resize: vertical;
+            min-height: 200px;
+        }
+        #results-container {
+            display: none;
+        }
+        .vulnerability-indicator {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 10px;
+        }
+        .high-risk {
+            background-color: #dc3545;
+        }
+        .medium-risk {
+            background-color: #28a745;
+        }
+        .low-risk {
+            background-color: #28a745;
+        }
+        .progress {
+            height: 20px;
+        }
+        .loading {
+            display: none;
+            text-align: center;
+            margin: 20px 0;
+        }
+        .sample-button {
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 class="text-center mb-4">Smart Contract Vulnerability Analyzer</h1>
+        
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">Input Smart Contract Bytecode</h5>
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <button id="sample-bytecode" class="btn btn-sm btn-secondary sample-button">Load Sample Bytecode</button>
+                    <button id="clear-bytecode" class="btn btn-sm btn-outline-danger sample-button">Clear</button>
+                </div>
+                <textarea id="bytecode-input" class="form-control mb-3" placeholder="Paste your smart contract bytecode here (e.g., 0x60806040...)"></textarea>
+                <button id="analyze-btn" class="btn btn-primary">Analyze Contract</button>
+                
+                <div id="loading" class="loading">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <p>Analyzing bytecode...</p>
+                </div>
+            </div>
+        </div>
+        
+        <div id="results-container" class="card">
+            <div class="card-header">
+                <h5 class="mb-0">Vulnerability Analysis Results</h5>
+            </div>
+            <div class="card-body">
+                <div id="summary" class="alert alert-info mb-4">
+                    Analyzing bytecode with <span id="bytecode-length">0</span> bytes...
+                </div>
+                
+                <h6>Detected Vulnerabilities:</h6>
+                <div id="vulnerabilities-list"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Elements
+            const bytecodeInput = document.getElementById('bytecode-input');
+            const analyzeBtn = document.getElementById('analyze-btn');
+            const sampleBtn = document.getElementById('sample-bytecode');
+            const clearBtn = document.getElementById('clear-bytecode');
+            const resultsContainer = document.getElementById('results-container');
+            const vulnerabilitiesList = document.getElementById('vulnerabilities-list');
+            const bytecodeLength = document.getElementById('bytecode-length');
+            const loading = document.getElementById('loading');
+            const summary = document.getElementById('summary');
+            
+            // Sample bytecode (truncated for demonstration)
+            const sampleBytecode = '608060405234801561001057600080fd5b506040516020806102a383398101604052516000553360018190553060028190556201518042016003819055506102458061004a6000396000f3006080604052600436106100615763ffffffff7c01000000000000000000000000000000000000000000000000000000006000350416631a39d8ef81146100';
+            
+            // Load sample bytecode
+            sampleBtn.addEventListener('click', function() {
+                bytecodeInput.value = sampleBytecode;
+            });
+            
+            // Clear bytecode
+            clearBtn.addEventListener('click', function() {
+                bytecodeInput.value = '';
+                resultsContainer.style.display = 'none';
+            });
+            
+            // Analyze bytecode
+            analyzeBtn.addEventListener('click', function() {
+                const bytecode = bytecodeInput.value.trim();
+                
+                if (!bytecode) {
+                    alert('Please enter bytecode to analyze');
+                    return;
+                }
+                
+                // Show loading indicator
+                loading.style.display = 'block';
+                resultsContainer.style.display = 'none';
+                
+                // Send bytecode to backend for analysis
+                fetch('/analyze', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                    },
+                    body: 'bytecode=' + encodeURIComponent(bytecode)
+                })
+                .then(response => response.json())
+                .then(data => {
+                    // Hide loading indicator
+                    loading.style.display = 'none';
+                    
+                    if (data.error) {
+                        alert(data.error);
+                        return;
+                    }
+                    
+                    // Update bytecode length
+                    bytecodeLength.textContent = data.bytecode_length;
+                    
+                    // Clear previous results
+                    vulnerabilitiesList.innerHTML = '';
+                    
+                    // Calculate overall risk
+                    let highRiskCount = 0;
+                    let totalVulnerabilities = data.results.length;
+                    
+                    // Display vulnerability results
+                    data.results.forEach(vuln => {
+                        if (vuln.detected) highRiskCount++;
+                        
+                        // Create vulnerability card
+                        const card = document.createElement('div');
+                        card.className = 'card mb-3';
+                        
+                        // Determine risk level
+                        let riskClass = vuln.detected ? 'high-risk' : 'low-risk';
+                        if (vuln.probability > 30 && vuln.probability < 50) {
+                            riskClass = 'medium-risk';
+                        }
+                        
+                        // Create card content
+                        card.innerHTML = `
+                            <div class="card-body">
+                                <h6 class="card-title">
+                                    <span class="vulnerability-indicator ${riskClass}"></span>
+                                    ${vuln.type}
+                                </h6>
+                                <div class="progress mb-2">
+                                    <div class="progress-bar ${vuln.detected ? 'bg-danger' : 'bg-success'}" 
+                                         role="progressbar" 
+                                         style="width: ${vuln.probability}%" 
+                                         aria-valuenow="${vuln.probability}" 
+                                         aria-valuemin="0" 
+                                         aria-valuemax="100">
+                                        ${vuln.probability}%
+                                    </div>
+                                </div>
+                                <p class="card-text mb-0">
+                                    Status: <strong>${vuln.detected ? 'Vulnerability Detected' : 'No Vulnerability Detected'}</strong>
+                                </p>
+                            </div>
+                        `;
+                        
+                        vulnerabilitiesList.appendChild(card);
+                    });
+                    
+                    // Update summary
+                    let riskLevel = 'Low';
+                    let alertClass = 'alert-success';
+                    
+                    if (highRiskCount > 0) {
+                        if (highRiskCount / totalVulnerabilities > 0.5) {
+                            riskLevel = 'High';
+                            alertClass = 'alert-danger';
+                        } else {
+                            riskLevel = 'Medium';
+                            alertClass = 'alert-warning';
+                        }
+                    }
+                    
+                    summary.className = `alert ${alertClass} mb-4`;
+                    summary.innerHTML = `
+                        <strong>${riskLevel} Risk Level</strong>: Analyzed ${data.bytecode_length} bytes of bytecode and found 
+                        ${highRiskCount} potential vulnerabilities out of ${totalVulnerabilities} checked vulnerability types.
+                    `;
+                    
+                    // Show results
+                    resultsContainer.style.display = 'block';
+                })
+                .catch(error => {
+                    loading.style.display = 'none';
+                    alert('Error analyzing bytecode: ' + error);
+                });
+            });
+        });
+    </script>
+</body>
+</html>
